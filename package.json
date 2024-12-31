@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@ant-design/charts": "^2.2.6",
     "@ant-design/icons": "^5.5.2",
     "@ant-design/pro-components": "^2.8.2",
     "@xyflow/react": "^12.3.6",
