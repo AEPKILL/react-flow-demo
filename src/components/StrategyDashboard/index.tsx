@@ -85,8 +85,7 @@ const columns: ProColumns[] = [
 
 export default function StrategyDashboard() {
 	return (
-		<div style={{ padding: 24 }}>
-			{/* 策略概括 */}
+		<>
 			<Row gutter={16}>
 				<Col span={6}>
 					<Card>
@@ -155,6 +154,6 @@ export default function StrategyDashboard() {
 					rowKey="id"
 				/>
 			</Card>
-		</div>
+		</>
 	);
 }

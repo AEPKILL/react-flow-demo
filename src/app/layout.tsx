@@ -7,7 +7,7 @@ import { routers } from "@/routers";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import logo from "@/assets/icon.png";
-import { Dropdown } from "antd";
+import { Dropdown, ConfigProvider, App } from "antd";
 
 const geistSans = Geist({
 	variable: "--font-geist-sans",
@@ -66,7 +66,9 @@ export default function RootLayout({
 						</Link>
 					)}
 				>
-					{children}
+					<ConfigProvider>
+						<App>{children}</App>
+					</ConfigProvider>
 				</ProLayout>
 			</body>
 		</html>
