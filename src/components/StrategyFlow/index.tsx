@@ -1,8 +1,7 @@
 import "@xyflow/react/dist/style.css";
 import "./index.css";
 
-import { useMemoizedFn } from "ahooks";
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { Subscription } from "rxjs";
 import { useStore } from "zustand";
 
@@ -13,6 +12,8 @@ import { ProCard } from "@ant-design/pro-components";
 import {
 	Controls,
 	MiniMap,
+	type OnNodesChange,
+	applyNodeChanges,
 	ReactFlow,
 	useEdgesState,
 	useNodesState,
@@ -20,10 +21,11 @@ import {
 
 import FlowBackground from "./components/FlowBackground";
 import FlowHelpLine from "./components/FlowHelpLine";
-import { useFlowStore, withFlowStore } from "./contexts/store.context";
 
 import type { AllStrategyFlowNode } from "./types/node.type";
 import type { AllStrategyFlowEdge } from "./types/edge.type";
+import { useMemoizedFn } from "ahooks";
+import calculateHelperLines from "./utils/helper-line.utils";
 const initialNodes = [
 	{
 		id: "hidden-1",
@@ -32,8 +34,8 @@ const initialNodes = [
 		position: { x: 250, y: 5 },
 	},
 	{ id: "hidden-2", data: { label: "Node 2" }, position: { x: 100, y: 100 } },
-	{ id: "hidden-3", data: { label: "Node 3" }, position: { x: 400, y: 100 } },
-	{ id: "hidden-4", data: { label: "Node 4" }, position: { x: 400, y: 200 } },
+	// { id: "hidden-3", data: { label: "Node 3" }, position: { x: 400, y: 100 } },
+	// { id: "hidden-4", data: { label: "Node 4" }, position: { x: 400, y: 200 } },
 ];
 
 const initialEdges = [
@@ -42,59 +44,98 @@ const initialEdges = [
 	{ id: "hidden-e3-4", source: "hidden-3", target: "hidden-4" },
 ];
 
-export default withReactFlow(
-	withFlowStore(function StrategyFlow() {
-		const [nodes, , onNodesChange] = useNodesState(initialNodes);
-		const [edges, , onEdgesChange] = useEdgesState(initialEdges);
-		const { isFullscreen, toggleFullscreen, elementRef } =
-			useToggleFillScreen();
+export default withReactFlow(function StrategyFlow() {
+	const [rect, setRect] = useState<DOMRect>();
+	const [nodes, setNodes] = useNodesState(
+		initialNodes as AllStrategyFlowNode[],
+	);
+	const [edges, , onEdgesChange] = useEdgesState(initialEdges);
+	const { isFullscreen, toggleFullscreen, elementRef } = useToggleFillScreen();
+	const [horizontalLines, setHorizontalLines] = useState<number[]>();
+	const [verticalLines, setVerticalLines] = useState<number[]>();
 
-		const { observableStore } = useFlowStore();
-		const { $edgeChange, $nodeChange, $nodeDrag } = useStore(observableStore);
+	const onNodesChange: OnNodesChange<AllStrategyFlowNode> = useMemoizedFn(
+		(changes) => {
+			setHorizontalLines(void 0);
+			setVerticalLines(void 0);
+			if (
+				changes.length === 1 &&
+				changes[0].type === "position" &&
+				changes[0].dragging &&
+				changes[0].position
+			) {
+				const snapResult = calculateHelperLines(changes[0], nodes);
 
-		useEffect(() => {
-			const subscription = new Subscription();
-			subscription.add($nodeChange.subscribe(onNodesChange));
-			subscription.add($edgeChange.subscribe(onEdgesChange));
-			return () => subscription.unsubscribe();
-		}, [onNodesChange, onEdgesChange, $nodeChange, $edgeChange]);
+				changes[0].position.x =
+					snapResult.snapPosition.x ?? changes[0].position.x;
+				changes[0].position.y =
+					snapResult.snapPosition.y ?? changes[0].position.y;
 
-		return (
-			<ProCard
-				split="vertical"
-				bodyStyle={{
-					height: isFullscreen ? "100vh" : "calc(100vh - 56px - 110px )",
-				}}
-				ref={elementRef}
+				setHorizontalLines(snapResult.horizontals);
+				setVerticalLines(snapResult.verticals);
+			}
+			setNodes(applyNodeChanges(changes, nodes));
+		},
+	);
+
+	useLayoutEffect(() => {
+		if (!elementRef.current) return;
+
+		setRect(elementRef.current.getBoundingClientRect());
+
+		const observer = new ResizeObserver(() => {
+			if (!elementRef.current) return;
+			setRect(elementRef.current.getBoundingClientRect());
+		});
+
+		observer.observe(elementRef.current);
+
+		return () => {
+			observer.disconnect();
+		};
+	}, [elementRef]);
+
+	console.log("lines", verticalLines, horizontalLines);
+
+	return (
+		<ProCard
+			split="vertical"
+			bodyStyle={{
+				height: isFullscreen ? "100vh" : "calc(100vh - 56px - 110px )",
+			}}
+			ref={elementRef}
+		>
+			<ReactFlow<AllStrategyFlowNode, AllStrategyFlowEdge>
+				fitView
+				nodes={nodes}
+				edges={edges}
+				onNodesChange={onNodesChange}
+				onEdgesChange={onEdgesChange}
+				maxZoom={4}
+				className="relative h-full  !bg-[#eef2f6]"
 			>
-				<ReactFlow<AllStrategyFlowNode, AllStrategyFlowEdge>
-					fitView
-					nodes={nodes}
-					edges={edges}
-					onNodesChange={(node) => $nodeChange.next(node)}
-					onEdgesChange={(node) => $edgeChange.next(node)}
-					onNodeDrag={(...args) => $nodeDrag.next(args)}
-					maxZoom={4}
-					className="relative h-full  !bg-[#eef2f6]"
-				>
-					<Controls orientation="horizontal">
-						<button
-							type="button"
-							className="react-flow__controls-button"
-							onClick={toggleFullscreen}
-						>
-							{isFullscreen ? (
-								<FullscreenExitOutlined className="cursor-pointer" />
-							) : (
-								<FullscreenOutlined className="cursor-pointer" />
-							)}
-						</button>
-					</Controls>
-					<FlowBackground gap={20} size={2} />
-					<FlowHelpLine />
-					<MiniMap />
-				</ReactFlow>
-			</ProCard>
-		);
-	}),
-);
+				<Controls orientation="horizontal">
+					<button
+						type="button"
+						className="react-flow__controls-button"
+						onClick={toggleFullscreen}
+					>
+						{isFullscreen ? (
+							<FullscreenExitOutlined className="cursor-pointer" />
+						) : (
+							<FullscreenOutlined className="cursor-pointer" />
+						)}
+					</button>
+				</Controls>
+				<FlowBackground gap={20} size={2} />
+				<FlowHelpLine
+					horizontalLines={horizontalLines}
+					verticalLines={verticalLines}
+					width={rect?.width}
+					height={rect?.height}
+				/>
+				<MiniMap />
+			</ReactFlow>
+		</ProCard>
+	);
+});
